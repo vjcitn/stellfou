@@ -6,6 +6,8 @@
 
 Exploration of elliptical fourier analysis for cell shapes
 
+![](reference/figures/sfou.jpg)
+
 </div>
 
 </div>

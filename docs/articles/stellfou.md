@@ -134,7 +134,7 @@ system.time(sfe <- run_efa_pipeline(sfe, n_harmonics = 12))
     ## New colData columns: 'efa_complexity', 'efa_ellipticity', 'efa_gof_*'.
 
     ##    user  system elapsed 
-    ##  14.307   1.010  15.337
+    ##  14.011   0.901  14.918
 
 <div id="cb28" class="sourceCode">
 

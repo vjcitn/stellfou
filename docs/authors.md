@@ -9,6 +9,8 @@
 -   **Vince Carey**. Author, maintainer.
     [](https://orcid.org/0000-0003-4046-0063)
 
+-   **Claude Opus**. Engineer.
+
 </div>
 
 <div class="section level2">
@@ -20,13 +22,13 @@ Source:
 
 Carey V (2026). *stellfou: Illustration of elliptical fourier analysis
 of cell shapes in spatial transcriptomics data*. R package version
-0.0.2, <https://github.com/vjcitn/stellfou>.
+0.0.3, <https://github.com/vjcitn/stellfou>.
 
     @Manual{,
       title = {stellfou: Illustration of elliptical fourier analysis of cell shapes in spatial transcriptomics data},
       author = {Vince Carey},
       year = {2026},
-      note = {R package version 0.0.2},
+      note = {R package version 0.0.3},
       url = {https://github.com/vjcitn/stellfou},
     }
 
