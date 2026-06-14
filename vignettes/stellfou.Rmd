@@ -1,0 +1,114 @@
+---
+title: "stellfou: exploration of elliptical fourier analysis for segmentations in spatial transcriptomics"
+author: "Vincent J. Carey, stvjc at channing.harvard.edu"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+vignette: >
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteIndexEntry{elliptical fourier analysis for segmentations}
+  %\VignetteEncoding{UTF-8}
+output:
+  BiocStyle::html_document:
+    highlight: pygments
+    number_sections: yes
+    theme: united
+    toc: yes
+---
+
+# Demonstration run
+
+## Data acquisition
+
+Use SpatialFeatureExperiment to acquire a demonstration Xenium dataset.
+```{r test1, message=FALSE}
+library(stellfou)
+library(SpatialFeatureExperiment)
+library(SFEData)
+library(Voyager)
+library(SummarizedExperiment) # for assay(), rowData()
+```
+
+```{r start}
+# --- Load a Xenium dataset with cell segmentations ---
+sfepath = XeniumOutput("v2")
+sfe = readXenium(sfepath)
+```
+
+## Pipeline execution
+
+Use a compact approach to modeling all cell
+boundary traces.  The workflow updates the
+input data structure.  The analysis is based 
+on the Momocs package, see the 2014 
+Journal of Statistical Software [paper](https://www.jstatsoft.org/article/view/v056i13).
+
+```{r dopipe}
+# --- Run the full pipeline ---
+sfe # before
+system.time(sfe <- run_efa_pipeline(sfe, n_harmonics = 12))
+sfe # after
+```
+
+### Discussion
+
+Claude gives the following discussion of workflow phases
+
+- Geometry extraction: cellSeg polygons from SFE are sf POLYGON (or sometimes MULTIPOLYGON for oddly segmented cells). The extractor handles both cases, taking the largest polygon for MULTIPOLYGONs. The closing vertex (required by sf but not by EFA) is stripped.
+
+- Arc-length resampling: EFA assumes uniformly-sampled contours for well-behaved coefficients. Cell segmentation polygons are often vertex-sparse (Cellpose/Baysor may emit 20–50 vertices per cell), so resampling to 200 equally-spaced points by arc length before Fourier decomposition avoids aliasing artifacts.
+
+- Coefficient storage: The 4×N coefficients ($a_n$, $b_n$, $c_n$, $d_n$) go into 
+`reducedDim(sfe, "EFA")`, which fits naturally into the SingleCellExperiment paradigm — you can run PCA on this shape space the same way you'd run it on gene expression. Two derived scalars go into `colData`: 
+`efa_ellipticity` (power fraction in the first harmonic — 
+1.0 for a perfect ellipse, lower for complex shapes) and `efa_complexity` (harmonics needed for 99% power).
+
+- Voyager integration: Since the EFA PCA scores live in reducedDim, you can immediately compute spatial autocorrelation of cell shape using Voyager's colDataMoransI(), testing whether morphologically similar cells cluster spatially. The example at the bottom sketches this, along with correlating shape ellipticity against gene expression.
+
+One thing to be aware of: Momocs efourier_norm() initializes a, b, and c
+parameters to (1,0,0) (fixing scale, rotation, and starting point), so if you want to preserve absolute cell size in the shape space, skip normalization and handle alignment separately. For most downstream analyses (clustering cells by shape irrespective of size), normalized coefficients are what you want.
+
+## Goodness-of-fit
+
+Examine some quality criteria.
+
+```{r lkgof}
+head(colData(sfe)[, c("efa_complexity", "efa_ellipticity")])
+
+# GoF summary across all cells
+gof_cols <- grep("^efa_gof_", names(colData(sfe)), value = TRUE)
+summary(as.data.frame(colData(sfe)[, gof_cols]))
+
+# Distribution of relative mean deviation
+hist(sfe$efa_gof_rel_mean_dev, breaks = 50,
+     main = "EFA reconstruction error\n(mean deviation / perimeter)",
+     xlab = "Relative mean deviation", col = "grey80")
+```
+
+### Identify cells with poor fits (may need more harmonics)
+
+```{r lkprob}
+poor_fit <- which(sfe$efa_gof_rel_mean_dev > 0.01)
+message(length(poor_fit), " cells have > 1% relative mean deviation")
+```
+
+## Visualize a subset of fits
+
+```{r lkviz}
+# --- Visualize progressive reconstruction for a few cells ---
+boundaries <- extract_cell_boundaries(sfe)
+efa_result <- compute_efa(boundaries, n_harmonics = 12)
+plot_efa_reconstruction(boundaries, efa_result,
+                        cell_ids = names(boundaries)[1:3],
+                        n_harmonics_seq = c(1, 3, 6, 12))
+```
+
+## Some statistics
+
+```{r lkvoy}
+# --- PCA on shape space is already in reducedDim ---
+# Can be used with Voyager for spatial autocorrelation of shape:
+colGraph(sfe, "knn") <- findSpatialNeighbors(sfe, method = "knearneigh", k = 6)
+sfe$shape_pc1 <- reducedDim(sfe, "EFA_PCA")[, 1]
+hist(sfe$shape_pc1)
+```
+
+

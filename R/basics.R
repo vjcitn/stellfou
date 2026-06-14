@@ -33,7 +33,7 @@
 #' @param n_points If not NULL, resample each boundary to this many
 #'   equally-spaced points (recommended for EFA comparability)
 #' @return A named list of (n x 2) matrices, one per cell
-#'
+#' @export
 extract_cell_boundaries <- function(sfe,
                                     geom_name = "cellSeg",
                                     n_points = 200) {
@@ -88,6 +88,7 @@ extract_cell_boundaries <- function(sfe,
 #' @param coords (m x 2) matrix of contour coordinates
 #' @param n target number of points
 #' @return (n x 2) matrix
+#' @export
 resample_contour <- function(coords, n = 200) {
   # Close the contour temporarily for arc-length computation
   closed <- rbind(coords, coords[1, ])
@@ -122,7 +123,7 @@ resample_contour <- function(coords, n = 200) {
 #'   - coefficients: (n_cells x 4*n_harmonics) matrix
 #'   - raw_efa: list of raw efourier output per cell
 #'   - n_harmonics: the number of harmonics used
-#'
+#' @export
 compute_efa <- function(boundaries,
                         n_harmonics = 12,
                         normalize = TRUE) {
@@ -243,7 +244,7 @@ compute_efa <- function(boundaries,
 #' @param efa_result Output of compute_efa()
 #' @param name Name for the reducedDim slot (default "EFA")
 #' @return The modified SFE object
-#'
+#' @export
 store_efa_in_sfe <- function(sfe, efa_result, name = "EFA") {
   # Store the full coefficient matrix as a reducedDim
   SingleCellExperiment::reducedDim(sfe, name) <- efa_result$coefficients
@@ -298,6 +299,7 @@ store_efa_in_sfe <- function(sfe, efa_result, name = "EFA") {
 #' Remap EFA field names to the convention efourier_i expects
 #' @param ef A list returned by efourier or efourier_norm
 #' @return The same list with fields named an, bn, cn, dn, a0, c0
+#' @export
 remap_efa_fields <- function(ef) {
   # If already has $an, nothing to do
 
@@ -318,7 +320,7 @@ remap_efa_fields <- function(ef) {
 #'   (NULL = all available)
 #' @param n_points Number of points in the reconstructed contour
 #' @return (n_points x 2) matrix of reconstructed coordinates
-#'
+#' @export
 reconstruct_cell <- function(efa_result, cell_id,
                              n_harmonics_use = NULL,
                              n_points = 300) {
@@ -474,7 +476,7 @@ store_gof_in_sfe <- function(sfe, gof_df, prefix = "efa_gof_") {
 #' @param cell_ids Character vector of cell IDs to plot
 #' @param n_harmonics_seq Harmonic counts to show progressive reconstruction
 #' @param ncol Number of columns in the plot layout
-#'
+#' @export
 plot_efa_reconstruction <- function(boundaries,
                                     efa_result,
                                     cell_ids = NULL,
@@ -519,7 +521,7 @@ plot_efa_reconstruction <- function(boundaries,
 #' @param n_pcs Number of PCs to retain
 #' @param store_name Name for the PCA reducedDim (NULL = don't store)
 #' @return prcomp result, invisibly
-#'
+#' @export
 efa_pca <- function(sfe,
                     efa_dim_name = "EFA",
                     n_pcs = 10,
@@ -559,7 +561,7 @@ efa_pca <- function(sfe,
 #' @param n_pcs Number of PCs to retain
 #' @return Modified SFE object with EFA and optionally EFA_PCA
 #'   in reducedDims, and efa_complexity / efa_ellipticity in colData
-#'
+#' @export
 run_efa_pipeline <- function(sfe,
                              geom_name = "cellSeg",
                              n_points = 200,

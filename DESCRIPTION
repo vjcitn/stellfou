@@ -1,7 +1,7 @@
 Package: stellfou
 Title: Illustration of elliptical fourier analysis of cell shapes
 	in spatial transcriptomics data
-Version: 0.0.1
+Version: 0.0.2
 Authors@R:
     person(given = "Vince",
            family = "Carey",
