@@ -1,0 +1,23 @@
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>https://github.com/vjcitn/stellfou/404.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/articles/index.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/articles/stellfou.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/authors.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/index.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/compute_efa.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/efa_goodness_of_fit.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/efa_pca.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/extract_cell_boundaries.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/index.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/nn_dists.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/plot_efa_reconstruction.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/polygon_area.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/polygon_perimeter.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/reconstruct_cell.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/remap_efa_fields.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/resample_contour.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/run_efa_pipeline.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/store_efa_in_sfe.html</loc></url>
+<url><loc>https://github.com/vjcitn/stellfou/reference/store_gof_in_sfe.html</loc></url>
+</urlset>
+

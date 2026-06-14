@@ -1,0 +1,70 @@
+<div id="main" class="col-md-9" role="main">
+
+# stellfou
+
+<div class="section level1">
+
+Exploration of elliptical fourier analysis for cell shapes
+
+</div>
+
+</div>
+
+<div id="main" class="col-md-9" role="main">
+
+# Package index
+
+<div class="section level2">
+
+## All functions
+
+</div>
+
+<div class="section level2">
+
+-   `compute_efa()` : Compute EFA for all cell boundaries
+-   `efa_goodness_of_fit()` : Compute per-cell EFA goodness-of-fit
+    metrics
+-   `efa_pca()` : PCA on EFA coefficients and optionally store in SFE
+-   `extract_cell_boundaries()` : sfe\_efa\_bridge.R – code created in
+    dialogue with claude.ai Opus 4.6 medium, June 3 2026
+-   `nn_dists()` : Compute nearest-neighbor distances from each row of A
+    to B
+-   `plot_efa_reconstruction()` : Plot original vs reconstructed cell
+    boundaries
+-   `polygon_area()` : Signed area of a polygon (positive if CCW)
+-   `polygon_perimeter()` : Perimeter of a polygon
+-   `reconstruct_cell()` : Reconstruct a cell boundary from its EFA
+    coefficients
+-   `remap_efa_fields()` : Remap EFA field names to the convention
+    efourier\_i expects
+-   `resample_contour()` : Resample a contour to n equally-spaced points
+    by arc length
+-   `run_efa_pipeline()` : Run the full EFA pipeline on an SFE object
+-   `store_efa_in_sfe()` : Add EFA coefficients as a reducedDim in the
+    SFE object
+-   `store_gof_in_sfe()` : Store GoF metrics in colData of an SFE object
+
+</div>
+
+</div>
+
+<div id="main" class="col-md-9" role="main">
+
+# Articles
+
+<div class="section">
+
+### All vignettes
+
+<div class="section-desc">
+
+</div>
+
+-   [stellfou: exploration of elliptical fourier analysis for
+    segmentations in spatial
+    transcriptomics](https://github.com/vjcitn/stellfou/articles/stellfou.md):
+
+</div>
+
+</div>
