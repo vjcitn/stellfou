@@ -111,4 +111,99 @@ sfe$shape_pc1 <- reducedDim(sfe, "EFA_PCA")[, 1]
 hist(sfe$shape_pc1)
 ```
 
+# Shape analysis sketch
 
+We continue with the sfe.
+
+```{r sketch}
+  library(SpatialFeatureExperiment)
+  library(SummarizedExperiment)
+  library(SFEData)
+  library(stellfou)
+
+
+bbox_roi <- c(xmin = 0, xmax = 1000, ymin = -1000, ymax = 0)
+Voyager::plotGeometry(sfe,
+  colGeometryName = c("cellSeg", "nucSeg"),
+  fill = FALSE, dark = TRUE,
+  image_id = "morphology_focus",
+  channel = 3:1,                    # BGR -> RGB for display
+  normalize_channels = TRUE,
+  bbox = bbox_roi,
+  show_axes = TRUE
+)
+
+
+  # --- Run the full pipeline ---
+  sfe <- run_efa_pipeline(sfe, n_harmonics = 12)
+
+  # --- Inspect shape descriptors and goodness-of-fit ---
+  head(colData(sfe)[, c("efa_complexity", "efa_ellipticity")])
+
+  # GoF summary across all cells
+  gof_cols <- grep("^efa_gof_", names(colData(sfe)), value = TRUE)
+  summary(as.data.frame(colData(sfe)[, gof_cols]))
+
+  # Distribution of relative mean deviation
+  hist(sfe$efa_gof_rel_mean_dev, breaks = 50,
+       main = "EFA reconstruction error\n(mean deviation / perimeter)",
+       xlab = "Relative mean deviation", col = "grey80")
+
+  # Identify cells with poor fits (may need more harmonics)
+  poor_fit <- which(sfe$efa_gof_rel_mean_dev > 0.01)
+  message(length(poor_fit), " cells have > 1% relative mean deviation")
+
+  # --- Visualize progressive reconstruction for a few cells ---
+  boundaries <- extract_cell_boundaries(sfe)
+  efa_result <- compute_efa(boundaries, n_harmonics = 12)
+  plot_efa_reconstruction(boundaries, efa_result,
+                          cell_ids = names(boundaries)[1:3],
+                          n_harmonics_seq = c(1, 3, 6, 12))
+
+  # --- PCA on shape space is already in reducedDim ---
+  # --- Spatial autocorrelation of cell shape ---
+  library(Voyager)
+
+  # Global Moran's I: are similar shapes spatially clustered?
+  sfe <- spatial_shape_analysis(sfe, k = 6, n_pcs = 5)
+  # Prints Moran's I for shape_PC1..PC5, ellipticity, complexity.
+  # Moran's I > 0 and significant = positive spatial autocorrelation
+  #   (nearby cells have similar shapes — expected in organized tissue)
+  # Moran's I ~ 0 = random spatial distribution of shape
+  # Moran's I < 0 = nearby cells are morphologically dissimilar (rare)
+
+  # Local Moran's I (LISA): WHERE are the shape clusters?
+
+  sfe <- shape_lisa(sfe, feature = "shape_PC1", nsim = 999)
+
+  # Low-Low = clusters of cells with low shape_PC1
+  # High-High = clusters of cells with high shape_PC1
+  # High-Low / Low-High = outlier cells unlike their neighbors
+
+  # Shape heterogeneity: where are tissue boundaries?
+
+  sfe <- neighborhood_shape_heterogeneity(sfe, feature = "efa_ellipticity")
+
+  # Cells at tissue interfaces (epithelial/stromal boundaries)
+  # will have high neighborhood SD because their neighbors
+  # include cells of a different morphological type.
+
+  # --- Correlate shape with gene expression ---
+  # e.g., test whether shape complexity associates with a gene:
+  # Use log1p(counts) if logcounts assay is not yet available
+  count_mat <- assay(sfe, "counts")
+
+  # --- Cross-correlation: shape vs expression in spatial context ---
+  # Do cells in morphologically homogeneous regions also show
+  # coordinated gene expression?
+  test_gene = "EPCAM"
+  rownames(count_mat) = make.names(rowData(sfe)$Symbol, unique=TRUE)
+
+    sfe[[paste0(test_gene, "_log1p")]] <- log1p(count_mat[test_gene, ])
+    # Lee's L statistic: bivariate spatial association
+    # (requires Voyager >= 0.5 or spdep::lee.test directly)
+     spdep::lee.mc(sfe$shape_PC1,
+                 sfe[[paste0(test_gene, "_log1p")]],
+                 get_listw(sfe, "knn"), length(sfe$shape_PC1), alternative="two.sided") 
+  
+```
