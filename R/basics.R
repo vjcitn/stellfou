@@ -511,6 +511,151 @@ plot_efa_reconstruction <- function(boundaries,
 
 
 # ============================================================
+# 4c. Reconstruct boundaries as sf geometries in original space
+# ============================================================
+
+#' Convert EFA reconstructions to sf polygons in original coordinate space
+#'
+#' The reconstruction uses the DC terms (a0/c0) stored in the raw EFA output,
+#' so the returned polygons are in the same coordinate system as the original
+#' cell segmentation geometries (e.g. Xenium stage coordinates in microns).
+#'
+#' @param efa_result Output of compute_efa()
+#' @param cell_ids Character vector of cell IDs to reconstruct (NULL = all valid)
+#' @param n_harmonics_use Number of harmonics (NULL = all available)
+#' @param n_points Number of points in the reconstructed contour
+#' @return An sf data.frame with columns cell_id and geometry (POLYGON)
+#' @examples
+#' make_ellipse <- function(cx, cy, a, b, n = 200L) {
+#'   theta <- seq(0, 2 * pi, length.out = n + 1L)[-(n + 1L)]
+#'   cbind(x = cx + a * cos(theta), y = cy + b * sin(theta))
+#' }
+#' boundaries <- list(
+#'   cellA = make_ellipse(100, 200, 15, 8),
+#'   cellB = make_ellipse(150, 220, 10, 10),
+#'   cellC = make_ellipse(120, 260, 12,  6)
+#' )
+#' efa_result <- compute_efa(boundaries, n_harmonics = 6)
+#' efa_to_sf(efa_result)
+#' @export
+efa_to_sf <- function(efa_result, cell_ids = NULL,
+                      n_harmonics_use = NULL,
+                      n_points = 300) {
+  valid_ids <- names(efa_result$raw_efa)[efa_result$valid]
+  if (is.null(cell_ids)) {
+    cell_ids <- valid_ids
+  } else {
+    bad <- setdiff(cell_ids, valid_ids)
+    if (length(bad) > 0) {
+      message("  ", length(bad), " requested cell(s) have no valid EFA; skipping.")
+      cell_ids <- intersect(cell_ids, valid_ids)
+    }
+  }
+
+  polys <- lapply(cell_ids, function(cid) {
+    coords <- tryCatch(
+      reconstruct_cell(efa_result, cid, n_harmonics_use, n_points),
+      error = function(e) NULL
+    )
+    if (is.null(coords)) return(sf::st_polygon(list()))
+    sf::st_polygon(list(rbind(coords, coords[1L, ])))
+  })
+
+  sf::st_sf(
+    cell_id = cell_ids,
+    geometry = sf::st_sfc(polys)
+  )
+}
+
+#' Plot EFA-reconstructed and original boundaries in original coordinate space
+#'
+#' Overlays original cell boundaries (grey) and their EFA reconstructions
+#' (red) in a single base-R plot using tissue/stage coordinates so spatial
+#' relationships between cells are preserved.
+#'
+#' @param boundaries Named list of (n x 2) coordinate matrices (output of
+#'   extract_cell_boundaries())
+#' @param efa_result Output of compute_efa()
+#' @param cell_ids Cell IDs to include (NULL = all valid, up to max_cells)
+#' @param max_cells Maximum number of cells to plot when cell_ids is NULL
+#' @param n_harmonics_use Number of harmonics (NULL = all available)
+#' @param n_points Points in the reconstructed contour
+#' @param col_orig Color for original boundaries
+#' @param col_recon Color for reconstructed boundaries
+#' @param lwd_recon Line width for reconstructed boundaries
+#' @param ... Additional arguments passed to plot()
+#' @return Invisibly returns an sf object of the reconstructed boundaries
+#' @examples
+#' make_ellipse <- function(cx, cy, a, b, n = 200L) {
+#'   theta <- seq(0, 2 * pi, length.out = n + 1L)[-(n + 1L)]
+#'   cbind(x = cx + a * cos(theta), y = cy + b * sin(theta))
+#' }
+#' boundaries <- list(
+#'   cellA = make_ellipse(100, 200, 15, 8),
+#'   cellB = make_ellipse(150, 220, 10, 10),
+#'   cellC = make_ellipse(120, 260, 12,  6)
+#' )
+#' efa_result <- compute_efa(boundaries, n_harmonics = 6)
+#' plot_efa_in_space(boundaries, efa_result)
+#' @export
+plot_efa_in_space <- function(boundaries, efa_result,
+                              cell_ids = NULL,
+                              max_cells = 200L,
+                              n_harmonics_use = NULL,
+                              n_points = 300L,
+                              col_orig = "grey50",
+                              col_recon = "firebrick",
+                              lwd_recon = 1.5,
+                              ...) {
+  valid_ids <- names(efa_result$raw_efa)[efa_result$valid]
+  if (is.null(cell_ids)) {
+    cell_ids <- valid_ids[seq_len(min(max_cells, length(valid_ids)))]
+  } else {
+    cell_ids <- intersect(cell_ids, valid_ids)
+  }
+
+  # Set axis limits from the union of original boundary extents
+  orig_list <- Filter(Negate(is.null), boundaries[cell_ids])
+  if (length(orig_list) == 0L) stop("No valid boundaries to plot.")
+  all_orig <- do.call(rbind, orig_list)
+  xlim <- range(all_orig[, 1L])
+  ylim <- range(all_orig[, 2L])
+
+  n_h <- if (is.null(n_harmonics_use)) efa_result$n_harmonics else n_harmonics_use
+  plot(NULL, xlim = xlim, ylim = ylim, asp = 1,
+       xlab = "x", ylab = "y",
+       main = sprintf("EFA reconstructions (%d harmonics, %d cells)",
+                      n_h, length(cell_ids)),
+       ...)
+
+  for (cid in cell_ids) {
+    orig <- boundaries[[cid]]
+    if (!is.null(orig)) {
+      polygon(orig[c(seq_len(nrow(orig)), 1L), ], border = col_orig,
+              col = NA, lwd = 1)
+    }
+    recon <- tryCatch(
+      reconstruct_cell(efa_result, cid, n_harmonics_use, n_points),
+      error = function(e) NULL
+    )
+    if (!is.null(recon)) {
+      lines(recon[c(seq_len(nrow(recon)), 1L), ], col = col_recon,
+            lwd = lwd_recon)
+    }
+  }
+
+  legend("topright",
+         legend = c("original", sprintf("EFA (%d harmonics)", n_h)),
+         col    = c(col_orig, col_recon),
+         lty    = 1L,
+         lwd    = c(1, lwd_recon),
+         bty    = "n")
+
+  invisible(efa_to_sf(efa_result, cell_ids, n_harmonics_use, n_points))
+}
+
+
+# ============================================================
 # 5. PCA on EFA shape space
 # ============================================================
 
