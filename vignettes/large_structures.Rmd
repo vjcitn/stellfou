@@ -1,0 +1,229 @@
+---
+title: "Large Structure Shape Analysis and Component Fusion"
+author: "Vincent J. Carey, stvjc at channing.harvard.edu"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+vignette: >
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteIndexEntry{Large Structure Shape Analysis and Component Fusion}
+  %\VignetteEncoding{UTF-8}
+output:
+  BiocStyle::html_document:
+    highlight: pygments
+    number_sections: yes
+    theme: united
+    toc: yes
+---
+
+# Introduction
+
+In spatial transcriptomics image analysis, features of interest often span multiple scales. While cell-level segmentation is standard, we also frequently need to analyze the geometry of larger tissue structures (e.g., bands, rings, and islands). 
+
+However, annotations, text labels, and experimental markers overlaid on these structures can create artificial gaps and split a single continuous region into multiple disconnected components.
+
+This vignette demonstrates how to:
+1. Load image data from the package.
+2. Register annotated image centroids to a clean target image.
+3. Morphologically fuse disconnected components of split structures.
+4. Fit Elliptical Fourier Analysis (EFA) models to the fused contours.
+5. Evaluate the goodness-of-fit using a Jaccard lack-of-fit metric.
+
+```{r setup, message=FALSE}
+library(stellfou)
+library(jpeg)
+library(stars)
+library(sf)
+library(EBImage)
+```
+
+# Load Image Data
+
+We retrieve the paths to the demonstration images included in the package:
+
+```{r paths}
+path_labeled <- system.file("jpgs/labeledXen.jpg", package = "stellfou")
+path_orig <- system.file("jpgs/orig.jpg", package = "stellfou")
+
+img_labeled <- readJPEG(path_labeled)
+img_orig <- readJPEG(path_orig)
+```
+
+# Step 1: Centroid Detection
+
+We isolate the red cross markers in `labeledXen.jpg` to find the centroids of the annotated structures:
+
+```{r centroids}
+red_mask <- (img_labeled[,,1] > 0.7) & (img_labeled[,,2] < 0.3) & (img_labeled[,,3] < 0.3)
+labeled_red <- bwlabel(Image(red_mask))
+red_sizes <- table(labeled_red)
+valid_red_ids <- names(red_sizes)[red_sizes >= 5 & names(red_sizes) != "0"]
+
+red_centroids <- t(sapply(valid_red_ids, function(id) {
+  coords <- which(labeled_red == as.numeric(id), arr.ind = TRUE)
+  c(row = mean(coords[, 1]), col = mean(coords[, 2]))
+}))
+
+cat("Detected", nrow(red_centroids), "centroids.\n")
+```
+
+# Step 2: Axis-Based Registration
+
+We define the exact boundaries of the plot areas. Both plot areas are exactly 535 x 551 pixels, so the translation shift is a simple constant shift:
+
+```{r registration}
+# Registration parameters
+row_shift <- 12
+col_shift <- 1016
+r_orig_start <- 111
+r_orig_end <- 645
+c_orig_start <- 1086
+c_orig_end <- 1636
+
+# Map absolute labeled centroids to cropped orig coordinates
+mapped_centroids <- matrix(0, nrow = nrow(red_centroids), ncol = 2)
+colnames(mapped_centroids) <- c("row", "col")
+rownames(mapped_centroids) <- rownames(red_centroids)
+
+for (i in 1:nrow(red_centroids)) {
+  r_orig <- red_centroids[i, "row"] + row_shift
+  c_orig <- red_centroids[i, "col"] + col_shift
+  mapped_centroids[i, "row"] <- r_orig - r_orig_start + 1
+  mapped_centroids[i, "col"] <- c_orig - c_orig_start + 1
+}
+```
+
+# Step 3: Morphological Shape Fusion
+
+We extract the target binary mask from `orig.jpg` and apply the `fuse_components` function to bridge small gaps and union disconnected pieces belonging to the same structure:
+
+```{r fusion}
+cropped_orig <- img_orig[r_orig_start:r_orig_end, c_orig_start:c_orig_end, ]
+white_mask_orig <- (cropped_orig[,,1] > 0.8) & (cropped_orig[,,2] > 0.8) & (cropped_orig[,,3] > 0.8)
+
+# Fuse disconnected components with a disc brush of size 9
+fused_mask <- fuse_components(white_mask_orig, brush_size = 9)
+```
+
+We now map the centroids to the fused components, fill internal cavities, and extract the exterior boundary ring of each structure:
+
+```{r contours}
+fused_boundaries <- list()
+fused_polygons <- list()
+
+for (i in 1:nrow(mapped_centroids)) {
+  r_c <- mapped_centroids[i, "row"]
+  c_c <- mapped_centroids[i, "col"]
+  
+  # Find matched fused component ID
+  r_round <- round(r_c)
+  c_round <- round(c_c)
+  val <- 0
+  if (r_round >= 1 && r_round <= nrow(fused_mask) &&
+      c_round >= 1 && c_round <= ncol(fused_mask)) {
+    val <- fused_mask[r_round, c_round]
+  }
+  
+  if (val == 0) {
+    # Search nearest non-zero pixel
+    indices <- which(fused_mask != 0, arr.ind = TRUE)
+    dists <- (indices[, 1] - r_c)^2 + (indices[, 2] - c_c)^2
+    min_idx <- which.min(dists)
+    val <- fused_mask[indices[min_idx, 1], indices[min_idx, 2]]
+  }
+  
+  # Extract mask of this component
+  comp_mask <- fused_mask == val
+  comp_mask_filled <- fillHull(Image(comp_mask))
+  
+  # Convert to sf polygon
+  mask_matrix <- t(as.matrix(comp_mask_filled))
+  mask_matrix <- matrix(as.integer(mask_matrix), nrow=nrow(mask_matrix), ncol=ncol(mask_matrix))
+  st_mask <- st_as_stars(mask_matrix)
+  sf_shapes <- st_as_sf(st_mask, merge = TRUE, as_points = FALSE)
+  sf_shapes <- sf_shapes[sf_shapes$A1 == 1, ]
+  
+  if (nrow(sf_shapes) > 0) {
+    areas <- as.numeric(st_area(sf_shapes))
+    largest_idx <- which.max(areas)
+    poly <- sf_shapes[largest_idx, ]
+    
+    geom <- st_geometry(poly)[[1]]
+    if (inherits(geom, "MULTIPOLYGON")) {
+      polys <- lapply(geom, function(p) sf::st_polygon(list(p[[1]])))
+      p_areas <- vapply(polys, function(p) as.numeric(sf::st_area(p)), numeric(1))
+      geom <- geom[[which.max(p_areas)]]
+    }
+    
+    coords <- as.matrix(geom[[1]])
+    fused_polygons[[paste0("region_", i)]] <- st_polygon(list(coords))
+    
+    # Remove duplicate closing point for EFA
+    if (nrow(coords) > 2 && all(coords[1, ] == coords[nrow(coords), ])) {
+      coords <- coords[-nrow(coords), , drop = FALSE]
+    }
+    fused_boundaries[[paste0("region_", i)]] <- coords
+  }
+}
+```
+
+# Step 4: Elliptical Fourier Analysis (EFA)
+
+We resample the boundaries to 200 points and fit a 12-harmonic EFA model:
+
+```{r efa}
+resampled_boundaries <- lapply(fused_boundaries, function(coords) {
+  resample_contour(coords, n = 200)
+})
+
+efa_result <- compute_efa(resampled_boundaries, n_harmonics = 12, normalize = TRUE)
+```
+
+# Step 5: Goodness-of-Fit and Lack-of-Fit
+
+We evaluate the EFA reconstructions using the `compute_jaccard_lof` function:
+
+```{r lof}
+lof_scores <- numeric(length(resampled_boundaries))
+names(lof_scores) <- names(resampled_boundaries)
+
+for (name in names(resampled_boundaries)) {
+  recon_orig <- reconstruct_cell(efa_result, name, n_harmonics_use = 12)
+  recon_poly <- st_polygon(list(rbind(recon_orig, recon_orig[1, ])))
+  
+  orig_poly <- fused_polygons[[name]]
+  lof_scores[name] <- compute_jaccard_lof(orig_poly, recon_poly)
+}
+
+summary(lof_scores)
+```
+
+A median Lack-of-Fit score of under 13% confirms that the fused structures are reconstructed with very high fidelity.
+
+# Visualization
+
+We can map the reconstructed EFA shapes back to `labeledXen.jpg` coordinates and overlay them:
+
+```{r plot_overlay, fig.width=6, fig.height=6}
+# Map back to absolute labeledXen coordinates
+reconstructed_labeled <- list()
+for (name in names(resampled_boundaries)) {
+  recon_orig <- reconstruct_cell(efa_result, name, n_harmonics_use = 12)
+  
+  r_orig <- recon_orig[, 2] + r_orig_start - 1
+  c_orig <- recon_orig[, 1] + c_orig_start - 1
+  
+  row_labeled <- r_orig - row_shift
+  col_labeled <- c_orig - col_shift
+  
+  reconstructed_labeled[[name]] <- cbind(col_labeled, row_labeled)
+}
+
+# Plot
+plot(1, type = "n", xlim = c(1, ncol(img_labeled)), ylim = c(nrow(img_labeled), 1), 
+     asp = 1, axes = FALSE, xlab = "", ylab = "", main = "EFA Overlay on Fused Shapes")
+rasterImage(img_labeled, 1, nrow(img_labeled), ncol(img_labeled), 1)
+
+for (name in names(reconstructed_labeled)) {
+  pts <- reconstructed_labeled[[name]]
+  lines(rbind(pts, pts[1, ]), col = "#00FFFF", lwd = 2)
+}
+```
