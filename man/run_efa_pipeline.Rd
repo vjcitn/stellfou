@@ -29,6 +29,8 @@ run_efa_pipeline(
 \item{do_pca}{Run PCA on the shape space}
 
 \item{n_pcs}{Number of PCs to retain}
+
+\item{compute_gof}{Logical; compute goodness-of-fit metrics (default TRUE)}
 }
 \value{
 Modified SFE object with EFA and optionally EFA_PCA

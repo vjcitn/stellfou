@@ -559,6 +559,7 @@ efa_pca <- function(sfe,
 #' @param normalize Normalize coefficients
 #' @param do_pca Run PCA on the shape space
 #' @param n_pcs Number of PCs to retain
+#' @param compute_gof Logical; compute goodness-of-fit metrics (default TRUE)
 #' @return Modified SFE object with EFA and optionally EFA_PCA
 #'   in reducedDims, and efa_complexity / efa_ellipticity in colData
 #' @export

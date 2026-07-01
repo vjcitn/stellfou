@@ -14,7 +14,7 @@ Description: This package was coded with Claude to explore the
 	data arising in spatial transcriptomics.
 Depends: R (>= 4.1.0)
 Suggests: knitr, BiocStyle, testthat, rmarkdown
-Imports: Momocs, SpatialFeatureExperiment, SummarizedExperiment, sf
+Imports: Momocs, SpatialFeatureExperiment, SummarizedExperiment, sf, EBImage, stars
 License: Artistic-2.0
 VignetteBuilder: knitr
 biocViews: Infrastructure
