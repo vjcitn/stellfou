@@ -4,12 +4,10 @@
 \alias{efa_goodness_of_fit}
 \title{Compute per-cell EFA goodness-of-fit metrics}
 \usage{
-efa_goodness_of_fit(boundaries, efa_result, n_harmonics_use = NULL)
+efa_goodness_of_fit(x, n_harmonics_use = NULL)
 }
 \arguments{
-\item{boundaries}{Named list of (n x 2) coordinate matrices}
-
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{n_harmonics_use}{Number of harmonics for reconstruction
 (NULL = all available)}

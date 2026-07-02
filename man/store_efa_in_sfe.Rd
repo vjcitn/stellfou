@@ -4,12 +4,12 @@
 \alias{store_efa_in_sfe}
 \title{Add EFA coefficients as a reducedDim in the SFE object}
 \usage{
-store_efa_in_sfe(sfe, efa_result, name = "EFA")
+store_efa_in_sfe(sfe, x, name = "EFA")
 }
 \arguments{
 \item{sfe}{A SpatialFeatureExperiment object}
 
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{name}{Name for the reducedDim slot (default "EFA")}
 }

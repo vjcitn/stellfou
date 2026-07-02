@@ -4,10 +4,10 @@
 \alias{reconstruct_cell}
 \title{Reconstruct a cell boundary from its EFA coefficients}
 \usage{
-reconstruct_cell(efa_result, cell_id, n_harmonics_use = NULL, n_points = 300)
+reconstruct_cell(x, cell_id, n_harmonics_use = NULL, n_points = 300)
 }
 \arguments{
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{cell_id}{Character; which cell to reconstruct}
 
@@ -17,7 +17,8 @@ reconstruct_cell(efa_result, cell_id, n_harmonics_use = NULL, n_points = 300)
 \item{n_points}{Number of points in the reconstructed contour}
 }
 \value{
-(n_points x 2) matrix of reconstructed coordinates
+(n_points x 2) matrix of reconstructed coordinates in the original
+  tissue coordinate system
 }
 \description{
 Reconstruct a cell boundary from its EFA coefficients

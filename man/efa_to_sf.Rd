@@ -4,10 +4,10 @@
 \alias{efa_to_sf}
 \title{Convert EFA reconstructions to sf polygons in original coordinate space}
 \usage{
-efa_to_sf(efa_result, cell_ids = NULL, n_harmonics_use = NULL, n_points = 300)
+efa_to_sf(x, cell_ids = NULL, n_harmonics_use = NULL, n_points = 300)
 }
 \arguments{
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{cell_ids}{Character vector of cell IDs to reconstruct (NULL = all valid)}
 
@@ -33,6 +33,6 @@ boundaries <- list(
   cellB = make_ellipse(150, 220, 10, 10),
   cellC = make_ellipse(120, 260, 12,  6)
 )
-efa_result <- compute_efa(boundaries, n_harmonics = 6)
-efa_to_sf(efa_result)
+x <- compute_efa(boundaries, n_harmonics = 6)
+efa_to_sf(x)
 }

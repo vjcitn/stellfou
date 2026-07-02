@@ -5,17 +5,14 @@
 \title{Plot original vs reconstructed cell boundaries}
 \usage{
 plot_efa_reconstruction(
-  boundaries,
-  efa_result,
+  x,
   cell_ids = NULL,
   n_harmonics_seq = c(1, 3, 6, 12),
   ncol = length(n_harmonics_seq)
 )
 }
 \arguments{
-\item{boundaries}{Named list of coordinate matrices}
-
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{cell_ids}{Character vector of cell IDs to plot}
 

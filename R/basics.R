@@ -119,10 +119,8 @@ resample_contour <- function(coords, n = 200) {
 #' @param n_harmonics Number of Fourier harmonics
 #' @param normalize Logical; normalize coefficients for size,
 #'   rotation, and starting-point invariance
-#' @return A list with components:
-#'   - coefficients: (n_cells x 4*n_harmonics) matrix
-#'   - raw_efa: list of raw efourier output per cell
-#'   - n_harmonics: the number of harmonics used
+#' @return A \code{\link{CellEFA}} object bundling the input boundaries and
+#'   all fitted EFA components
 #' @export
 compute_efa <- function(boundaries,
                         n_harmonics = 12,
@@ -225,11 +223,12 @@ compute_efa <- function(boundaries,
   )
   rownames(coef_mat) <- names(boundaries)
 
-  list(
+  methods::new("CellEFA",
+    boundaries   = boundaries,
     coefficients = coef_mat,
-    raw_efa = raw_efa,
-    n_harmonics = n_harmonics,
-    valid = succeeded
+    raw_efa      = raw_efa,
+    n_harmonics  = as.integer(n_harmonics),
+    valid        = succeeded
   )
 }
 
@@ -241,17 +240,17 @@ compute_efa <- function(boundaries,
 #' Add EFA coefficients as a reducedDim in the SFE object
 #'
 #' @param sfe A SpatialFeatureExperiment object
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param name Name for the reducedDim slot (default "EFA")
 #' @return The modified SFE object
 #' @export
-store_efa_in_sfe <- function(sfe, efa_result, name = "EFA") {
+store_efa_in_sfe <- function(sfe, x, name = "EFA") {
   # Store the full coefficient matrix as a reducedDim
-  SingleCellExperiment::reducedDim(sfe, name) <- efa_result$coefficients
+  SingleCellExperiment::reducedDim(sfe, name) <- x@coefficients
 
   # Optionally store summary shape metrics in colData
-  n_h <- efa_result$n_harmonics
-  coefs <- efa_result$coefficients
+  n_h <- x@n_harmonics
+  coefs <- x@coefficients
 
   # Identify cells that have valid (non-NA) coefficients
   valid <- !is.na(coefs[, 1])
@@ -314,20 +313,21 @@ remap_efa_fields <- function(ef) {
 
 #' Reconstruct a cell boundary from its EFA coefficients
 #'
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param cell_id Character; which cell to reconstruct
 #' @param n_harmonics_use How many harmonics to use in reconstruction
 #'   (NULL = all available)
 #' @param n_points Number of points in the reconstructed contour
-#' @return (n_points x 2) matrix of reconstructed coordinates
+#' @return (n_points x 2) matrix of reconstructed coordinates in the original
+#'   tissue coordinate system
 #' @export
-reconstruct_cell <- function(efa_result, cell_id,
+reconstruct_cell <- function(x, cell_id,
                              n_harmonics_use = NULL,
                              n_points = 300) {
-  ef <- efa_result$raw_efa[[cell_id]]
+  ef <- x@raw_efa[[cell_id]]
   ef <- remap_efa_fields(ef)
   if (is.null(n_harmonics_use)) {
-    n_harmonics_use <- efa_result$n_harmonics
+    n_harmonics_use <- x@n_harmonics
   }
   Momocs::efourier_i(ef, nb.h = n_harmonics_use, nb.pts = n_points)
 }
@@ -371,8 +371,7 @@ polygon_perimeter <- function(coords) {
 #' For each cell, reconstructs the boundary from the stored EFA
 #' coefficients and compares to the original boundary.
 #'
-#' @param boundaries Named list of (n x 2) coordinate matrices
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param n_harmonics_use Number of harmonics for reconstruction
 #'   (NULL = all available)
 #' @return A data.frame with one row per cell and columns:
@@ -384,12 +383,12 @@ polygon_perimeter <- function(coords) {
 #'   - power_captured: fraction of total harmonic power in first
 #'       n_harmonics_use harmonics (1.0 if using all)
 #'
-efa_goodness_of_fit <- function(boundaries, efa_result,
+efa_goodness_of_fit <- function(x,
                                  n_harmonics_use = NULL) {
-  cell_ids <- names(boundaries)
+  cell_ids <- names(x@boundaries)
   n_cells <- length(cell_ids)
   if (is.null(n_harmonics_use)) {
-    n_harmonics_use <- efa_result$n_harmonics
+    n_harmonics_use <- x@n_harmonics
   }
 
   mean_dev <- max_dev <- sym_hausdorff <- rep(NA_real_, n_cells)
@@ -399,13 +398,13 @@ efa_goodness_of_fit <- function(boundaries, efa_result,
 
   for (i in seq_len(n_cells)) {
     cid <- cell_ids[i]
-    orig <- boundaries[[cid]]
-    ef <- efa_result$raw_efa[[cid]]
+    orig <- x@boundaries[[cid]]
+    ef <- x@raw_efa[[cid]]
     if (is.null(orig) || is.null(ef)) next
 
     # Reconstruct
     recon <- tryCatch(
-      reconstruct_cell(efa_result, cid,
+      reconstruct_cell(x, cid,
                        n_harmonics_use = n_harmonics_use,
                        n_points = nrow(orig)),
       error = function(e) NULL
@@ -429,7 +428,6 @@ efa_goodness_of_fit <- function(boundaries, efa_result,
 
     # Power fraction: how much power is in the first n_harmonics_use
     # vs. all n_harmonics available
-    n_h <- efa_result$n_harmonics
     a <- ef$an; b <- ef$bn; cc <- ef$cn; d <- ef$dn
     if (!is.null(a)) {
       full_power <- sum((a^2 + b^2 + cc^2 + d^2) / 2)
@@ -471,19 +469,17 @@ store_gof_in_sfe <- function(sfe, gof_df, prefix = "efa_gof_") {
 
 #' Plot original vs reconstructed cell boundaries
 #'
-#' @param boundaries Named list of coordinate matrices
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param cell_ids Character vector of cell IDs to plot
 #' @param n_harmonics_seq Harmonic counts to show progressive reconstruction
 #' @param ncol Number of columns in the plot layout
 #' @export
-plot_efa_reconstruction <- function(boundaries,
-                                    efa_result,
+plot_efa_reconstruction <- function(x,
                                     cell_ids = NULL,
                                     n_harmonics_seq = c(1, 3, 6, 12),
                                     ncol = length(n_harmonics_seq)) {
   if (is.null(cell_ids)) {
-    cell_ids <- names(boundaries)[1:min(4, length(boundaries))]
+    cell_ids <- names(x@boundaries)[seq_len(min(4L, length(x@boundaries)))]
   }
 
   n_cells <- length(cell_ids)
@@ -491,7 +487,7 @@ plot_efa_reconstruction <- function(boundaries,
   par(mfrow = c(n_cells, n_steps + 1), mar = c(1, 1, 2, 1))
 
   for (cid in cell_ids) {
-    orig <- boundaries[[cid]]
+    orig <- x@boundaries[[cid]]
     # Plot original
     plot(orig, type = "l", asp = 1, axes = FALSE,
          main = paste0(cid, "\noriginal"), cex.main = 0.8)
@@ -499,12 +495,11 @@ plot_efa_reconstruction <- function(boundaries,
 
     # Progressive reconstructions
     for (nh in n_harmonics_seq) {
-      recon <- reconstruct_cell(efa_result, cid,
-                                n_harmonics_use = nh)
+      recon <- reconstruct_cell(x, cid, n_harmonics_use = nh)
       plot(orig, type = "n", asp = 1, axes = FALSE,
            main = paste0(nh, " harmonics"), cex.main = 0.8)
       polygon(orig, border = "grey70", col = NA, lty = 2)
-      lines(rbind(recon, recon[1, ]), col = "firebrick", lwd = 2)
+      lines(rbind(recon, recon[1L, ]), col = "firebrick", lwd = 2)
     }
   }
 }
@@ -520,7 +515,7 @@ plot_efa_reconstruction <- function(boundaries,
 #' so the returned polygons are in the same coordinate system as the original
 #' cell segmentation geometries (e.g. Xenium stage coordinates in microns).
 #'
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param cell_ids Character vector of cell IDs to reconstruct (NULL = all valid)
 #' @param n_harmonics_use Number of harmonics (NULL = all available)
 #' @param n_points Number of points in the reconstructed contour
@@ -535,13 +530,13 @@ plot_efa_reconstruction <- function(boundaries,
 #'   cellB = make_ellipse(150, 220, 10, 10),
 #'   cellC = make_ellipse(120, 260, 12,  6)
 #' )
-#' efa_result <- compute_efa(boundaries, n_harmonics = 6)
-#' efa_to_sf(efa_result)
+#' x <- compute_efa(boundaries, n_harmonics = 6)
+#' efa_to_sf(x)
 #' @export
-efa_to_sf <- function(efa_result, cell_ids = NULL,
+efa_to_sf <- function(x, cell_ids = NULL,
                       n_harmonics_use = NULL,
                       n_points = 300) {
-  valid_ids <- names(efa_result$raw_efa)[efa_result$valid]
+  valid_ids <- names(x@raw_efa)[x@valid]
   if (is.null(cell_ids)) {
     cell_ids <- valid_ids
   } else {
@@ -554,7 +549,7 @@ efa_to_sf <- function(efa_result, cell_ids = NULL,
 
   polys <- lapply(cell_ids, function(cid) {
     coords <- tryCatch(
-      reconstruct_cell(efa_result, cid, n_harmonics_use, n_points),
+      reconstruct_cell(x, cid, n_harmonics_use, n_points),
       error = function(e) NULL
     )
     if (is.null(coords)) return(sf::st_polygon(list()))
@@ -573,9 +568,7 @@ efa_to_sf <- function(efa_result, cell_ids = NULL,
 #' (red) in a single base-R plot using tissue/stage coordinates so spatial
 #' relationships between cells are preserved.
 #'
-#' @param boundaries Named list of (n x 2) coordinate matrices (output of
-#'   extract_cell_boundaries())
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param cell_ids Cell IDs to include (NULL = all valid, up to max_cells)
 #' @param max_cells Maximum number of cells to plot when cell_ids is NULL
 #' @param n_harmonics_use Number of harmonics (NULL = all available)
@@ -595,10 +588,10 @@ efa_to_sf <- function(efa_result, cell_ids = NULL,
 #'   cellB = make_ellipse(150, 220, 10, 10),
 #'   cellC = make_ellipse(120, 260, 12,  6)
 #' )
-#' efa_result <- compute_efa(boundaries, n_harmonics = 6)
-#' plot_efa_in_space(boundaries, efa_result)
+#' x <- compute_efa(boundaries, n_harmonics = 6)
+#' plot_efa_in_space(x)
 #' @export
-plot_efa_in_space <- function(boundaries, efa_result,
+plot_efa_in_space <- function(x,
                               cell_ids = NULL,
                               max_cells = 200L,
                               n_harmonics_use = NULL,
@@ -607,7 +600,7 @@ plot_efa_in_space <- function(boundaries, efa_result,
                               col_recon = "firebrick",
                               lwd_recon = 1.5,
                               ...) {
-  valid_ids <- names(efa_result$raw_efa)[efa_result$valid]
+  valid_ids <- names(x@raw_efa)[x@valid]
   if (is.null(cell_ids)) {
     cell_ids <- valid_ids[seq_len(min(max_cells, length(valid_ids)))]
   } else {
@@ -615,13 +608,13 @@ plot_efa_in_space <- function(boundaries, efa_result,
   }
 
   # Set axis limits from the union of original boundary extents
-  orig_list <- Filter(Negate(is.null), boundaries[cell_ids])
+  orig_list <- Filter(Negate(is.null), x@boundaries[cell_ids])
   if (length(orig_list) == 0L) stop("No valid boundaries to plot.")
   all_orig <- do.call(rbind, orig_list)
   xlim <- range(all_orig[, 1L])
   ylim <- range(all_orig[, 2L])
 
-  n_h <- if (is.null(n_harmonics_use)) efa_result$n_harmonics else n_harmonics_use
+  n_h <- if (is.null(n_harmonics_use)) x@n_harmonics else n_harmonics_use
   plot(NULL, xlim = xlim, ylim = ylim, asp = 1,
        xlab = "x", ylab = "y",
        main = sprintf("EFA reconstructions (%d harmonics, %d cells)",
@@ -629,13 +622,13 @@ plot_efa_in_space <- function(boundaries, efa_result,
        ...)
 
   for (cid in cell_ids) {
-    orig <- boundaries[[cid]]
+    orig <- x@boundaries[[cid]]
     if (!is.null(orig)) {
       polygon(orig[c(seq_len(nrow(orig)), 1L), ], border = col_orig,
               col = NA, lwd = 1)
     }
     recon <- tryCatch(
-      reconstruct_cell(efa_result, cid, n_harmonics_use, n_points),
+      reconstruct_cell(x, cid, n_harmonics_use, n_points),
       error = function(e) NULL
     )
     if (!is.null(recon)) {
@@ -651,7 +644,7 @@ plot_efa_in_space <- function(boundaries, efa_result,
          lwd    = c(1, lwd_recon),
          bty    = "n")
 
-  invisible(efa_to_sf(efa_result, cell_ids, n_harmonics_use, n_points))
+  invisible(efa_to_sf(x, cell_ids, n_harmonics_use, n_points))
 }
 
 
@@ -662,9 +655,7 @@ plot_efa_in_space <- function(boundaries, efa_result,
 #' individual cells; hover to see the cell ID. Requires the ggplot2 and plotly
 #' packages (listed under Suggests).
 #'
-#' @param boundaries Named list of (n x 2) coordinate matrices (output of
-#'   extract_cell_boundaries())
-#' @param efa_result Output of compute_efa()
+#' @param x A \code{\link{CellEFA}} object (output of compute_efa())
 #' @param cell_ids Cell IDs to include (NULL = all valid, up to max_cells)
 #' @param max_cells Maximum number of cells when cell_ids is NULL
 #' @param n_harmonics_use Number of harmonics (NULL = all available)
@@ -684,11 +675,11 @@ plot_efa_in_space <- function(boundaries, efa_result,
 #'     cellB = make_ellipse(150, 220, 10, 10),
 #'     cellC = make_ellipse(120, 260, 12,  6)
 #'   )
-#'   efa_result <- compute_efa(boundaries, n_harmonics = 3)
-#'   plot_efa_interactive(boundaries, efa_result)
+#'   x <- compute_efa(boundaries, n_harmonics = 3)
+#'   plot_efa_interactive(x)
 #' }
 #' @export
-plot_efa_interactive <- function(boundaries, efa_result,
+plot_efa_interactive <- function(x,
                                  cell_ids      = NULL,
                                  max_cells     = 500L,
                                  n_harmonics_use = NULL,
@@ -700,7 +691,7 @@ plot_efa_interactive <- function(boundaries, efa_result,
   if (!requireNamespace("plotly", quietly = TRUE))
     stop("plotly is required: install.packages('plotly')")
 
-  valid_ids <- names(efa_result$raw_efa)[efa_result$valid]
+  valid_ids <- names(x@raw_efa)[x@valid]
   if (is.null(cell_ids)) {
     cell_ids <- valid_ids[seq_len(min(max_cells, length(valid_ids)))]
   } else {
@@ -715,10 +706,10 @@ plot_efa_interactive <- function(boundaries, efa_result,
   }
 
   orig_rows  <- lapply(cell_ids, function(cid)
-    make_rows(cid, boundaries[[cid]], "original"))
+    make_rows(cid, x@boundaries[[cid]], "original"))
   recon_rows <- lapply(cell_ids, function(cid) {
     coords <- tryCatch(
-      reconstruct_cell(efa_result, cid, n_harmonics_use, n_points),
+      reconstruct_cell(x, cid, n_harmonics_use, n_points),
       error = function(e) NULL
     )
     make_rows(cid, coords, "EFA")
@@ -822,14 +813,14 @@ run_efa_pipeline <- function(sfe,
   boundaries <- extract_cell_boundaries(sfe, geom_name, n_points)
 
   message("Computing EFA (", n_harmonics, " harmonics)...")
-  efa_result <- compute_efa(boundaries, n_harmonics, normalize)
+  x <- compute_efa(boundaries, n_harmonics, normalize)
 
   message("Storing in SFE...")
-  sfe <- store_efa_in_sfe(sfe, efa_result)
+  sfe <- store_efa_in_sfe(sfe, x)
 
   if (compute_gof) {
     message("Computing per-cell goodness-of-fit...")
-    gof_df <- efa_goodness_of_fit(boundaries, efa_result)
+    gof_df <- efa_goodness_of_fit(x)
     sfe <- store_gof_in_sfe(sfe, gof_df)
     message("  Median rel. mean deviation: ",
             round(median(gof_df$rel_mean_dev, na.rm = TRUE), 5))

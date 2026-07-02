@@ -16,10 +16,8 @@ compute_efa(boundaries, n_harmonics = 12, normalize = TRUE)
 rotation, and starting-point invariance}
 }
 \value{
-A list with components:
-  - coefficients: (n_cells x 4*n_harmonics) matrix
-  - raw_efa: list of raw efourier output per cell
-  - n_harmonics: the number of harmonics used
+A \code{\link{CellEFA}} object bundling the input boundaries and
+  all fitted EFA components
 }
 \description{
 Compute EFA for all cell boundaries

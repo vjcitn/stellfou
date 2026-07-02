@@ -5,8 +5,7 @@
 \title{Interactive spatial plot of EFA reconstructions via ggplot2 and plotly}
 \usage{
 plot_efa_interactive(
-  boundaries,
-  efa_result,
+  x,
   cell_ids = NULL,
   max_cells = 500L,
   n_harmonics_use = NULL,
@@ -16,10 +15,7 @@ plot_efa_interactive(
 )
 }
 \arguments{
-\item{boundaries}{Named list of (n x 2) coordinate matrices (output of
-extract_cell_boundaries())}
-
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{cell_ids}{Cell IDs to include (NULL = all valid, up to max_cells)}
 
@@ -54,7 +50,7 @@ if (requireNamespace("ggplot2", quietly = TRUE) &&
     cellB = make_ellipse(150, 220, 10, 10),
     cellC = make_ellipse(120, 260, 12,  6)
   )
-  efa_result <- compute_efa(boundaries, n_harmonics = 3)
-  plot_efa_interactive(boundaries, efa_result)
+  x <- compute_efa(boundaries, n_harmonics = 3)
+  plot_efa_interactive(x)
 }
 }

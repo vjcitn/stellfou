@@ -5,8 +5,7 @@
 \title{Plot EFA-reconstructed and original boundaries in original coordinate space}
 \usage{
 plot_efa_in_space(
-  boundaries,
-  efa_result,
+  x,
   cell_ids = NULL,
   max_cells = 200L,
   n_harmonics_use = NULL,
@@ -18,10 +17,7 @@ plot_efa_in_space(
 )
 }
 \arguments{
-\item{boundaries}{Named list of (n x 2) coordinate matrices (output of
-extract_cell_boundaries())}
-
-\item{efa_result}{Output of compute_efa()}
+\item{x}{A \code{\link{CellEFA}} object (output of compute_efa())}
 
 \item{cell_ids}{Cell IDs to include (NULL = all valid, up to max_cells)}
 
@@ -57,6 +53,6 @@ boundaries <- list(
   cellB = make_ellipse(150, 220, 10, 10),
   cellC = make_ellipse(120, 260, 12,  6)
 )
-efa_result <- compute_efa(boundaries, n_harmonics = 6)
-plot_efa_in_space(boundaries, efa_result)
+x <- compute_efa(boundaries, n_harmonics = 6)
+plot_efa_in_space(x)
 }
