@@ -655,6 +655,108 @@ plot_efa_in_space <- function(boundaries, efa_result,
 }
 
 
+#' Interactive spatial plot of EFA reconstructions via ggplot2 and plotly
+#'
+#' Renders original and EFA-reconstructed cell boundaries as an interactive
+#' plotly figure. Pan and zoom into any subregion to inspect fit quality for
+#' individual cells; hover to see the cell ID. Requires the ggplot2 and plotly
+#' packages (listed under Suggests).
+#'
+#' @param boundaries Named list of (n x 2) coordinate matrices (output of
+#'   extract_cell_boundaries())
+#' @param efa_result Output of compute_efa()
+#' @param cell_ids Cell IDs to include (NULL = all valid, up to max_cells)
+#' @param max_cells Maximum number of cells when cell_ids is NULL
+#' @param n_harmonics_use Number of harmonics (NULL = all available)
+#' @param n_points Points in the reconstructed contour
+#' @param col_orig Color for original boundaries
+#' @param col_recon Color for EFA-reconstructed boundaries
+#' @return A plotly figure object
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE) &&
+#'     requireNamespace("plotly",  quietly = TRUE)) {
+#'   make_ellipse <- function(cx, cy, a, b, n = 200L) {
+#'     theta <- seq(0, 2 * pi, length.out = n + 1L)[-(n + 1L)]
+#'     cbind(x = cx + a * cos(theta), y = cy + b * sin(theta))
+#'   }
+#'   boundaries <- list(
+#'     cellA = make_ellipse(100, 200, 15,  8),
+#'     cellB = make_ellipse(150, 220, 10, 10),
+#'     cellC = make_ellipse(120, 260, 12,  6)
+#'   )
+#'   efa_result <- compute_efa(boundaries, n_harmonics = 3)
+#'   plot_efa_interactive(boundaries, efa_result)
+#' }
+#' @export
+plot_efa_interactive <- function(boundaries, efa_result,
+                                 cell_ids      = NULL,
+                                 max_cells     = 500L,
+                                 n_harmonics_use = NULL,
+                                 n_points      = 300L,
+                                 col_orig      = "steelblue",
+                                 col_recon     = "firebrick") {
+  if (!requireNamespace("ggplot2", quietly = TRUE))
+    stop("ggplot2 is required: install.packages('ggplot2')")
+  if (!requireNamespace("plotly", quietly = TRUE))
+    stop("plotly is required: install.packages('plotly')")
+
+  valid_ids <- names(efa_result$raw_efa)[efa_result$valid]
+  if (is.null(cell_ids)) {
+    cell_ids <- valid_ids[seq_len(min(max_cells, length(valid_ids)))]
+  } else {
+    cell_ids <- intersect(cell_ids, valid_ids)
+  }
+
+  make_rows <- function(cid, mat, type) {
+    if (is.null(mat)) return(NULL)
+    data.frame(x = mat[, 1L], y = mat[, 2L],
+               cell_id = cid, type = type,
+               stringsAsFactors = FALSE)
+  }
+
+  orig_rows  <- lapply(cell_ids, function(cid)
+    make_rows(cid, boundaries[[cid]], "original"))
+  recon_rows <- lapply(cell_ids, function(cid) {
+    coords <- tryCatch(
+      reconstruct_cell(efa_result, cid, n_harmonics_use, n_points),
+      error = function(e) NULL
+    )
+    make_rows(cid, coords, "EFA")
+  })
+
+  plot_df       <- do.call(rbind, c(orig_rows, recon_rows))
+  plot_df$type  <- factor(plot_df$type, levels = c("original", "EFA"))
+  plot_df$group <- paste(plot_df$cell_id, plot_df$type, sep = ".")
+
+  n_h <- if (is.null(n_harmonics_use)) efa_result$n_harmonics else n_harmonics_use
+
+  p <- ggplot2::ggplot(
+    plot_df,
+    ggplot2::aes(
+      x     = x,
+      y     = y,
+      group = group,
+      color = type,
+      text  = cell_id
+    )
+  ) +
+    ggplot2::geom_polygon(fill = NA, linewidth = 0.4) +
+    ggplot2::coord_equal() +
+    ggplot2::scale_color_manual(
+      values = c(original = col_orig, EFA = col_recon),
+      name   = NULL
+    ) +
+    ggplot2::labs(
+      title = sprintf("EFA reconstructions (%d harmonics, %d cells)",
+                      n_h, length(cell_ids)),
+      x = "x", y = "y"
+    ) +
+    ggplot2::theme_minimal()
+
+  plotly::ggplotly(p, tooltip = "text")
+}
+
+
 # ============================================================
 # 5. PCA on EFA shape space
 # ============================================================
